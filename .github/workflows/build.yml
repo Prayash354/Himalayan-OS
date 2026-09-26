@@ -27,10 +27,7 @@ jobs:
           mkdir -p himalayan-build
           cd himalayan-build
 
-          # Force debootstrap to use official Debian mirrors
-          export LB_DEBOOTSTRAP_OPTIONS="--mirror=http://deb.debian.org/debian/"
-
-          # Configure live-build
+          # 1. Configure live-build options
           lb config \
             --mode debian \
             --distribution bookworm \
@@ -39,18 +36,32 @@ jobs:
             --archive-areas "main contrib non-free non-free-firmware" \
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
-            --mirror-binary "http://deb.debian.org/debian/" \
-            --packages "live-boot live-config systemd-sysv live-task-kde-desktop sddm dolphin konsole firefox-esr network-manager calamares"
+            --mirror-binary "http://deb.debian.org/debian/"
+
+          # 2. Add package lists properly
+          mkdir -p config/package-lists
+          cat << 'EOF' > config/package-lists/desktop.list.chroot
+          live-boot
+          live-config
+          systemd-sysv
+          live-task-kde-desktop
+          sddm
+          dolphin
+          konsole
+          firefox-esr
+          network-manager
+          calamares
+          EOF
 
           CHROOT_DIR="config/includes.chroot"
 
-          # Create directory structure
+          # 3. Create directory structures
           mkdir -p "$CHROOT_DIR/etc/xdg/plasma-workspace"
           mkdir -p "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images"
           mkdir -p "$CHROOT_DIR/etc/skel/.config/fastfetch"
           mkdir -p "$CHROOT_DIR/etc/default/grub.d"
 
-          # 1. Taskbar Layout
+          # 4. Taskbar Layout
           cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasma-workspace/layout.js"
           var panel = new Panel();
           panel.height = 44;
@@ -67,13 +78,13 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 2. Wallpaper Config
+          # 5. Wallpaper Config
           cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasmarc"
           [Wallpaper][org.kde.image][General]
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
           EOF
 
-          # 3. Shell Startup (.bashrc)
+          # 6. Shell Startup (.bashrc)
           cat << 'EOF' >> "$CHROOT_DIR/etc/skel/.bashrc"
 
           # Welcome to Himalayan OS
@@ -84,7 +95,7 @@ jobs:
           echo -e "\e[1;30m===🏔️ Himalayan OS 🇳🇵===\e[0m"
           EOF
 
-          # Build ISO
+          # 7. Build ISO
           lb build
 
           if [ -f live-image-amd64.hybrid.iso ]; then
