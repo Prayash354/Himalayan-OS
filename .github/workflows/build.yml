@@ -1,0 +1,117 @@
+name: Build Himalayan OS Image
+on: [workflow_dispatch] # Allows you to start the build with a single click
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free up Server Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+
+      - name: Install Debian Live Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y live-build curl debootstrap
+
+      - name: Initialize Workspace and Run Custom OS Configuration
+        run: |
+          mkdir himalayan-build && cd himalayan-build
+          sudo lb config \
+              --distribution bookworm \
+              --binary-images iso-hybrid \
+              --architectures amd64 \
+              --archive-areas "main contrib non-free non-free-firmware"
+          
+          CHROOT_DIR="config/includes.chroot"
+          mkdir -p "$CHROOT_DIR/etc/xdg/plasma-workspace"
+          mkdir -p "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images"
+          mkdir -p "$CHROOT_DIR/etc/skel/.config/fastfetch"
+          mkdir -p "$CHROOT_DIR/usr/share/images/desktop-base"
+          mkdir -p "$CHROOT_DIR/usr/share/kio/servicemenus"
+          mkdir -p "$CHROOT_DIR/usr/share/sounds/HimalayanOS"
+          mkdir -p "$CHROOT_DIR/etc/skel/.config/autostart"
+          mkdir -p config/hooks.chroot
+
+          # Set up i386 hooks
+          cat << 'EOF' > config/hooks.chroot/0100-add-i386-architecture.chroot
+          #!/bin/sh
+          dpkg --add-architecture i386
+          apt-get update
+          EOF
+          chmod +x config/hooks.chroot/0100-add-i386-architecture.chroot
+
+          # Auto-accept fonts license
+          cat << 'EOF' > config/hooks.chroot/0101-accept-msttcorefonts-license.chroot
+          #!/bin/sh
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections
+          EOF
+          chmod +x config/hooks.chroot/0101-accept-msttcorefonts-license.chroot
+
+          # App list manifest
+          mkdir -p config/package-lists
+          cat << 'EOF' > config/package-lists/himalayan.list.chroot
+          packagekit plasma-desktop systemsettings sddm calamares calamares-settings-debian
+          firefox-esr dolphin konsole fastfetch curl network-manager-gnome plasma-nm
+          vlc gimp libreoffice-calc libreoffice-writer sox libsox-fmt-all supertuxkart
+          extreme-tuxracer gnome-chess gdebi software-properties-gtk synaptic muon
+          wine wine32 wine64 libwine libwine:i386 winetricks cabextract ttf-mscorefonts-installer
+          EOF
+
+          # Taskbar layout
+          cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasma-workspace/layout.js"
+          var panel = new Panel; if (panelIds.length === 1) { panel.location = "bottom"; panel.height = 44; }
+          var kickoff = panel.addWidget("org.kde.plasma.kickoff");
+          var taskmanager = panel.addWidget("org.kde.plasma.icontasks");
+          taskmanager.currentConfigGroup = ["General"];
+          taskmanager.writeConfig("launchers", ["applications:org.kde.dolphin.desktop","applications:firefox-esr.desktop","applications:org.kde.konsole.desktop"]);
+          panel.addWidget("org.kde.plasma.pager"); panel.addWidget("org.kde.plasma.panelspacer");
+          panel.addWidget("org.kde.plasma.systemtray"); panel.addWidget("org.kde.plasma.digitalclock");
+          EOF
+
+          # Sound and images assets configuration
+          curl -L -o "$CHROOT_DIR/usr/share/sounds/HimalayanOS/startup.mp3" "https://google.com" || true
+          cat << 'EOF' > "$CHROOT_DIR/etc/skel/.config/autostart/himalayan-startup-sound.desktop"
+          [Desktop Entry]
+          Type=Application
+          Name=Himalayan OS Startup Sound
+          Exec=play /usr/share/sounds/HimalayanOS/startup.mp3
+          OnlyShowIn=KDE;
+          Terminal=false
+          X-KDE-autostart-phase=2
+          EOF
+
+          curl -L -o "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg" "https://unsplash.com"
+          cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasmarc"
+          [Wallpaper][org.kde.image][General]
+          Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
+          EOF
+
+          curl -L -o "$CHROOT_DIR/usr/share/images/desktop-base/desktop-grub.png" "https://unsplash.com"
+          mkdir -p "$CHROOT_DIR/etc/default/grub.d"
+          echo 'GRUB_BACKGROUND="/usr/share/images/desktop-base/desktop-grub.png"' > "$CHROOT_DIR/etc/default/grub.d/himalayan-splash.cfg"
+
+          # Fastfetch setup
+          cat << 'EOF' > "$CHROOT_DIR/etc/skel/.config/fastfetch/config.jsonc"
+          {"$schema": "https://github.com","logo": { "type": "small" },"modules": ["title","separator",{"type": "os", "key": " 🏔️ OS ", "format": "Himalayan OS"},{"type": "wm", "key": " 🖥️ WM ", "format": "KDE Plasma"},"memory","break"]}
+          EOF
+          cat << 'EOF' >> "$CHROOT_DIR/etc/skel/.bashrc"
+          if [ -f /usr/bin/fastfetch ]; then
+              echo -e "\e[1;34m      ◢◣\e[0m\n     ◢██◣     \e[1;31m■\e[0m\n    ◢████◣    \e[1;31m■■\e[0m\n===🏔️ Himalayan OS 🇳🇵===\e[0m"
+              fastfetch --config ~/.config/fastfetch/config.jsonc
+          fi
+          EOF
+
+          # Compile the image inside the cloud server
+          sudo lb build
+          
+          # Rename the finished output neatly
+          sudo mv live-image-amd64.hybrid.iso HimalayanOS-v1.iso
+
+      - name: Upload Completed Himalayan OS ISO File
+        uses: actions/upload-artifact@v4
+        with:
+          name: HimalayanOS-Image
+          path: himalayan-build/HimalayanOS-v1.iso
