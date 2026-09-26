@@ -14,6 +14,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Free Disk Space on Runner
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo docker image prune --all --force
+
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
@@ -66,7 +74,7 @@ jobs:
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
           EOF
 
-          # 3. Inject Fastfetch Configuration (Clean Multiline JSON)
+          # 3. Inject Fastfetch Configuration
           cat << 'EOF' | sudo tee "$CHROOT_DIR/etc/skel/.config/fastfetch/config.jsonc" > /dev/null
           {
             "$schema": "https://github.com",
