@@ -37,13 +37,23 @@ jobs:
           deb http://deb.debian.org/debian/ bookworm-updates main contrib non-free non-free-firmware
           EOF
 
-          # 2. Mount pseudo-filesystems
+          # 2. Fix DNS resolution inside chroot
+          sudo cp /etc/resolv.conf ./chroot/etc/resolv.conf
+
+          # 3. Prevent services from starting during package setup
+          cat << 'EOF' | sudo tee ./chroot/usr/sbin/policy-rc.d > /dev/null
+          #!/bin/sh
+          exit 101
+          EOF
+          sudo chmod +x ./chroot/usr/sbin/policy-rc.d
+
+          # 4. Mount pseudo-filesystems
           sudo mount --bind /dev ./chroot/dev
           sudo mount --bind /dev/pts ./chroot/dev/pts
           sudo mount -t proc proc ./chroot/proc
           sudo mount -t sysfs sys ./chroot/sys
 
-          # 3. Update & Install Desktop Stack
+          # 5. Update & Install Core Desktop Packages
           sudo chroot ./chroot /bin/bash -c "
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
@@ -53,7 +63,10 @@ jobs:
               fastfetch curl
           "
 
-          # 4. Inject Taskbar Layout
+          # 6. Clean policy override
+          sudo rm -f ./chroot/usr/sbin/policy-rc.d
+
+          # 7. Inject Taskbar Layout
           sudo mkdir -p ./chroot/etc/xdg/plasma-workspace
           cat << 'EOF' | sudo tee ./chroot/etc/xdg/plasma-workspace/layout.js > /dev/null
           var panel = new Panel();
@@ -71,7 +84,7 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 5. Inject Wallpaper Configuration
+          # 8. Inject Wallpaper Configuration
           sudo mkdir -p ./chroot/usr/share/wallpapers/HimalayanOS/contents/images
           sudo mkdir -p ./chroot/etc/xdg
           cat << 'EOF' | sudo tee ./chroot/etc/xdg/plasmarc > /dev/null
@@ -79,7 +92,7 @@ jobs:
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
           EOF
 
-          # 6. Inject Fastfetch & Shell Startup
+          # 9. Inject Fastfetch & Shell Startup
           sudo mkdir -p ./chroot/etc/skel/.config/fastfetch
           cat << 'EOF' | sudo tee ./chroot/etc/skel/.config/fastfetch/config.jsonc > /dev/null
           {
