@@ -9,66 +9,59 @@ on:
 jobs:
   build-iso:
     runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm
+      options: --privileged
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Free Disk Space
+      - name: Install System Dependencies
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
-          sudo docker image prune --all --force
+          apt-get update
+          apt-get install -y live-build debootstrap curl git debian-archive-keyring isolinux syslinux-utils xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin
 
-      - name: Install Build Tools
+      - name: Configure and Build Himalayan OS
         run: |
-          sudo apt-get update
-          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin mtools debian-archive-keyring
+          mkdir -p himalayan-build
+          cd himalayan-build
 
-      - name: Bootstrap Debian Bookworm RootFS
-        run: |
-          sudo debootstrap --arch=amd64 --variant=minbase bookworm ./chroot http://deb.debian.org/debian/
+          # Configure live-build
+          lb config \
+            --mode debian \
+            --distribution bookworm \
+            --binary-images iso-hybrid \
+            --architectures amd64 \
+            --archive-areas "main contrib non-free non-free-firmware" \
+            --mirror-bootstrap "http://deb.debian.org/debian/" \
+            --mirror-chroot "http://deb.debian.org/debian/" \
+            --mirror-binary "http://deb.debian.org/debian/"
 
-      - name: Configure System and Install Packages
-        run: |
-          # 1. Setup Apt Sources inside chroot
-          cat << 'EOF' | sudo tee ./chroot/etc/apt/sources.list > /dev/null
-          deb http://deb.debian.org/debian/ bookworm main contrib non-free non-free-firmware
-          deb http://deb.debian.org/debian-security/ bookworm-security main contrib non-free non-free-firmware
-          deb http://deb.debian.org/debian/ bookworm-updates main contrib non-free non-free-firmware
+          # Inject Package Lists
+          mkdir -p config/package-lists
+          cat << 'EOF' > config/package-lists/desktop.list.chroot
+          live-boot
+          live-config
+          systemd-sysv
+          plasma-desktop
+          sddm
+          dolphin
+          konsole
+          firefox-esr
+          network-manager
+          calamares
           EOF
 
-          # 2. Fix DNS resolution inside chroot
-          sudo cp /etc/resolv.conf ./chroot/etc/resolv.conf
+          CHROOT_DIR="config/includes.chroot"
 
-          # 3. Prevent services from starting during package setup
-          cat << 'EOF' | sudo tee ./chroot/usr/sbin/policy-rc.d > /dev/null
-          #!/bin/sh
-          exit 101
-          EOF
-          sudo chmod +x ./chroot/usr/sbin/policy-rc.d
+          # Create directory structures
+          mkdir -p "$CHROOT_DIR/etc/xdg/plasma-workspace"
+          mkdir -p "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images"
+          mkdir -p "$CHROOT_DIR/etc/skel/.config/fastfetch"
 
-          # 4. Mount pseudo-filesystems
-          sudo mount --bind /dev ./chroot/dev
-          sudo mount --bind /dev/pts ./chroot/dev/pts
-          sudo mount -t proc proc ./chroot/proc
-          sudo mount -t sysfs sys ./chroot/sys
-
-          # 5. Update & Install Core Desktop Packages
-          sudo chroot ./chroot /bin/bash -c "
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update
-            apt-get install -y --no-install-recommends \
-              linux-image-amd64 live-boot systemd-sysv \
-              plasma-desktop sddm dolphin konsole firefox-esr network-manager calamares \
-              fastfetch curl
-          "
-
-          # 6. Clean policy override
-          sudo rm -f ./chroot/usr/sbin/policy-rc.d
-
-          # 7. Inject Taskbar Layout
-          sudo mkdir -p ./chroot/etc/xdg/plasma-workspace
-          cat << 'EOF' | sudo tee ./chroot/etc/xdg/plasma-workspace/layout.js > /dev/null
+          # 1. Inject Taskbar Layout
+          cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasma-workspace/layout.js"
           var panel = new Panel();
           panel.height = 44;
           panel.location = "bottom";
@@ -84,31 +77,14 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 8. Inject Wallpaper Configuration
-          sudo mkdir -p ./chroot/usr/share/wallpapers/HimalayanOS/contents/images
-          sudo mkdir -p ./chroot/etc/xdg
-          cat << 'EOF' | sudo tee ./chroot/etc/xdg/plasmarc > /dev/null
+          # 2. Inject Wallpaper Configuration
+          cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasmarc"
           [Wallpaper][org.kde.image][General]
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
           EOF
 
-          # 9. Inject Fastfetch & Shell Startup
-          sudo mkdir -p ./chroot/etc/skel/.config/fastfetch
-          cat << 'EOF' | sudo tee ./chroot/etc/skel/.config/fastfetch/config.jsonc > /dev/null
-          {
-            "$schema": "https://github.com",
-            "logo": { "type": "small" },
-            "modules": [
-              "title",
-              "separator",
-              { "type": "os", "key": " 🏔️ OS ", "format": "Himalayan OS" },
-              { "type": "wm", "key": " 🖥️ WM ", "format": "KDE Plasma" },
-              "memory"
-            ]
-          }
-          EOF
-
-          cat << 'EOF' | sudo tee -a ./chroot/etc/skel/.bashrc > /dev/null
+          # 3. Inject Shell Startup
+          cat << 'EOF' >> "$CHROOT_DIR/etc/skel/.bashrc"
 
           # Welcome to Himalayan OS
           echo -e "\e[1;34m      ◢◣\e[0m"
@@ -116,49 +92,17 @@ jobs:
           echo -e "\e[1;34m    ◢████◣    \e[1;31m■■\e[0m"
           echo -e "\e[1;34m   ◢██████◣   \e[1;31m■■■\e[0m"
           echo -e "\e[1;30m===🏔️ Himalayan OS 🇳🇵===\e[0m"
-          if [ -f /usr/bin/fastfetch ]; then
-              fastfetch --config ~/.config/fastfetch/config.jsonc
+          EOF
+
+          # Build ISO
+          lb build
+
+          if [ -f live-image-amd64.hybrid.iso ]; then
+            mv live-image-amd64.hybrid.iso HimalayanOS-v1.iso
           fi
-          EOF
 
-          # Unmount virtual filesystems
-          sudo umount -l ./chroot/dev/pts || true
-          sudo umount -l ./chroot/dev || true
-          sudo umount -l ./chroot/proc || true
-          sudo umount -l ./chroot/sys || true
-
-      - name: Build Live ISO Image
-        run: |
-          mkdir -p iso/live iso/boot/grub
-
-          # Package root filesystem into SquashFS
-          sudo mksquashfs ./chroot iso/live/filesystem.squashfs -e boot
-
-          # Copy kernel and initrd
-          sudo cp ./chroot/boot/vmlinuz-* iso/live/vmlinuz
-          sudo cp ./chroot/boot/initrd.img-* iso/live/initrd.img
-
-          # Create GRUB boot configuration
-          cat << 'EOF' | sudo tee iso/boot/grub/grub.cfg > /dev/null
-          insmod part_gpt
-          insmod part_msdos
-          insmod fat
-          insmod iso9660
-
-          set default="0"
-          set timeout=10
-
-          menuentry "Himalayan OS Live" {
-              linux /live/vmlinuz boot=live quiet splash
-              initrd /live/initrd.img
-          }
-          EOF
-
-          # Generate bootable ISO
-          grub-mkrescue -o HimalayanOS-v1.iso iso/
-
-      - name: Upload Himalayan OS ISO
+      - name: Upload Completed Himalayan OS ISO File
         uses: actions/upload-artifact@v4
         with:
           name: HimalayanOS-Image
-          path: HimalayanOS-v1.iso
+          path: himalayan-build/HimalayanOS-v1.iso
