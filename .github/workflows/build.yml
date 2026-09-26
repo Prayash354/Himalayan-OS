@@ -30,12 +30,13 @@ jobs:
 
       - name: Configure System and Install Packages
         run: |
-          # Mount necessary virtual filesystems
+          # Mount pseudo-filesystems
           sudo mount --bind /dev ./chroot/dev
-          sudo mount --bind /proc ./chroot/proc
-          sudo mount --bind /sys ./chroot/sys
+          sudo mount --bind /dev/pts ./chroot/dev/pts
+          sudo mount -t proc proc ./chroot/proc
+          sudo mount -t sysfs sys ./chroot/sys
 
-          # Configure chroot environment and packages
+          # Install packages inside chroot
           sudo chroot ./chroot /bin/bash -c "
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
@@ -100,10 +101,11 @@ jobs:
           fi
           EOF
 
-          # Clean up mounts
-          sudo umount -lf ./chroot/dev
-          sudo umount -lf ./chroot/proc
-          sudo umount -lf ./chroot/sys
+          # Safely unmount all virtual filesystems
+          sudo umount -l ./chroot/dev/pts
+          sudo umount -l ./chroot/dev
+          sudo umount -l ./chroot/proc
+          sudo umount -l ./chroot/sys
 
       - name: Build Live ISO Image
         run: |
@@ -132,7 +134,7 @@ jobs:
           }
           EOF
 
-          # Generate bootable ISO with xorriso
+          # Generate bootable ISO
           grub-mkrescue -o HimalayanOS-v1.iso iso/
 
       - name: Upload Himalayan OS ISO
