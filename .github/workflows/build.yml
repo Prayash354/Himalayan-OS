@@ -30,13 +30,20 @@ jobs:
 
       - name: Configure System and Install Packages
         run: |
-          # Mount pseudo-filesystems
+          # 1. Setup Apt Sources inside chroot
+          cat << 'EOF' | sudo tee ./chroot/etc/apt/sources.list > /dev/null
+          deb http://deb.debian.org/debian/ bookworm main contrib non-free non-free-firmware
+          deb http://deb.debian.org/debian-security/ bookworm-security main contrib non-free non-free-firmware
+          deb http://deb.debian.org/debian/ bookworm-updates main contrib non-free non-free-firmware
+          EOF
+
+          # 2. Mount pseudo-filesystems
           sudo mount --bind /dev ./chroot/dev
           sudo mount --bind /dev/pts ./chroot/dev/pts
           sudo mount -t proc proc ./chroot/proc
           sudo mount -t sysfs sys ./chroot/sys
 
-          # Install packages inside chroot
+          # 3. Update & Install Desktop Stack
           sudo chroot ./chroot /bin/bash -c "
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
@@ -46,7 +53,7 @@ jobs:
               fastfetch curl
           "
 
-          # 1. Inject Taskbar Layout
+          # 4. Inject Taskbar Layout
           sudo mkdir -p ./chroot/etc/xdg/plasma-workspace
           cat << 'EOF' | sudo tee ./chroot/etc/xdg/plasma-workspace/layout.js > /dev/null
           var panel = new Panel();
@@ -64,7 +71,7 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 2. Inject Wallpaper Configuration
+          # 5. Inject Wallpaper Configuration
           sudo mkdir -p ./chroot/usr/share/wallpapers/HimalayanOS/contents/images
           sudo mkdir -p ./chroot/etc/xdg
           cat << 'EOF' | sudo tee ./chroot/etc/xdg/plasmarc > /dev/null
@@ -72,7 +79,7 @@ jobs:
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
           EOF
 
-          # 3. Inject Fastfetch & Shell Startup
+          # 6. Inject Fastfetch & Shell Startup
           sudo mkdir -p ./chroot/etc/skel/.config/fastfetch
           cat << 'EOF' | sudo tee ./chroot/etc/skel/.config/fastfetch/config.jsonc > /dev/null
           {
@@ -101,11 +108,11 @@ jobs:
           fi
           EOF
 
-          # Safely unmount all virtual filesystems
-          sudo umount -l ./chroot/dev/pts
-          sudo umount -l ./chroot/dev
-          sudo umount -l ./chroot/proc
-          sudo umount -l ./chroot/sys
+          # Unmount virtual filesystems
+          sudo umount -l ./chroot/dev/pts || true
+          sudo umount -l ./chroot/dev || true
+          sudo umount -l ./chroot/proc || true
+          sudo umount -l ./chroot/sys || true
 
       - name: Build Live ISO Image
         run: |
