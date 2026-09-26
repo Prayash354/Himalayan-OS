@@ -22,17 +22,17 @@ jobs:
           sudo rm -rf /usr/local/share/boost
           sudo docker image prune --all --force
 
-      - name: Install Build Dependencies
+      - name: Install Build Dependencies & Keyrings
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debootstrap curl git
+          sudo apt-get install -y live-build debootstrap debian-archive-keyring curl git
 
       - name: Configure and Build Himalayan OS
         run: |
           sudo mkdir -p himalayan-build
           cd himalayan-build
 
-          # Configure live-build with official Debian mirrors and valid KDE packages
+          # Configure live-build cleanly
           sudo lb config \
             --distribution bookworm \
             --binary-images iso-hybrid \
@@ -41,7 +41,7 @@ jobs:
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
             --mirror-binary "http://deb.debian.org/debian/" \
-            --packages "live-task-kde-desktop sddm dolphin konsole firefox-esr network-manager calamares"
+            --keyring-packages debian-archive-keyring
 
           CHROOT_DIR="config/includes.chroot"
 
@@ -68,29 +68,13 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 2. Mount Everest Wallpaper Config
+          # 2. Inject Wallpaper Configuration
           cat << 'EOF' | sudo tee "$CHROOT_DIR/etc/xdg/plasmarc" > /dev/null
           [Wallpaper][org.kde.image][General]
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
           EOF
 
-          # 3. Fastfetch Configuration
-          cat << 'EOF' | sudo tee "$CHROOT_DIR/etc/skel/.config/fastfetch/config.jsonc" > /dev/null
-          {
-            "$schema": "https://github.com",
-            "logo": { "type": "small" },
-            "modules": [
-              "title",
-              "separator",
-              { "type": "os", "key": " 🏔️ OS ", "format": "Himalayan OS" },
-              { "type": "wm", "key": " 🖥️ WM ", "format": "KDE Plasma" },
-              "memory",
-              "break"
-            ]
-          }
-          EOF
-
-          # 4. Shell Startup (.bashrc)
+          # 3. Inject Shell Startup (.bashrc)
           cat << 'EOF' | sudo tee -a "$CHROOT_DIR/etc/skel/.bashrc" > /dev/null
 
           # Welcome to Himalayan OS
@@ -99,16 +83,16 @@ jobs:
           echo -e "\e[1;34m    ◢████◣    \e[1;31m■■\e[0m"
           echo -e "\e[1;34m   ◢██████◣   \e[1;31m■■■\e[0m"
           echo -e "\e[1;30m===🏔️ Himalayan OS 🇳🇵===\e[0m"
-          if [ -f /usr/bin/fastfetch ]; then
-              fastfetch --config ~/.config/fastfetch/config.jsonc
-          fi
           EOF
 
-          # Build ISO
+          # Build the ISO image
           sudo lb build
 
-          # Rename ISO file
-          sudo mv live-image-amd64.hybrid.iso HimalayanOS-v1.iso
+          # Find and rename the output ISO
+          ISO_FILE=$(ls *.iso *.hybrid.iso 2>/dev/null | head -n 1)
+          if [ -n "$ISO_FILE" ]; then
+            sudo mv "$ISO_FILE" HimalayanOS-v1.iso
+          fi
 
       - name: Upload Completed Himalayan OS ISO File
         uses: actions/upload-artifact@v4
