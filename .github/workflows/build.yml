@@ -51,14 +51,16 @@ jobs:
           firefox-esr
           network-manager
           calamares
+          calamares-settings-debian
+          sudo
+          desktop-base
           EOF
 
           CHROOT_DIR="config/includes.chroot"
 
           # Create directory structures
           mkdir -p "$CHROOT_DIR/etc/xdg/plasma-workspace"
-          mkdir -p "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images"
-          mkdir -p "$CHROOT_DIR/etc/skel/.config/fastfetch"
+          mkdir -p "$CHROOT_DIR/etc/skel/Desktop"
 
           # 1. Inject Taskbar Layout
           cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasma-workspace/layout.js"
@@ -77,13 +79,27 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 2. Inject Wallpaper Configuration
+          # 2. Inject Built-in Debian Wallpaper
           cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasmarc"
           [Wallpaper][org.kde.image][General]
-          Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
+          Image=usr/share/wallpapers/DebianTheme/contents/images/1920x1080.svg
           EOF
 
-          # 3. Inject Shell Startup
+          # 3. Create Installer Shortcut on Live Desktop
+          cat << 'EOF' > "$CHROOT_DIR/etc/skel/Desktop/install-himalayan.desktop"
+          [Desktop Entry]
+          Type=Application
+          Version=1.0
+          Name=Install Himalayan OS
+          Comment=Install the system to disk
+          Exec=sudo calamares
+          Icon=calamares
+          Terminal=false
+          Categories=System;
+          EOF
+          chmod +x "$CHROOT_DIR/etc/skel/Desktop/install-himalayan.desktop"
+
+          # 4. Inject Shell Startup
           cat << 'EOF' >> "$CHROOT_DIR/etc/skel/.bashrc"
 
           # Welcome to Himalayan OS
