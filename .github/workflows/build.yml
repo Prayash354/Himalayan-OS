@@ -17,15 +17,18 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies
+      - name: Install Build Dependencies
         run: |
           apt-get update
-          apt-get install -y live-build debootstrap curl git debian-archive-keyring isolinux syslinux-utils xorriso squashfs-tools
+          apt-get install -y live-build debootstrap curl git debian-archive-keyring
 
       - name: Configure and Build Himalayan OS
         run: |
           mkdir -p himalayan-build
           cd himalayan-build
+
+          # Force debootstrap to use official Debian mirrors
+          export LB_DEBOOTSTRAP_OPTIONS="--mirror=http://deb.debian.org/debian/"
 
           # Configure live-build
           lb config \
@@ -37,13 +40,11 @@ jobs:
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
             --mirror-binary "http://deb.debian.org/debian/" \
-            --apt-indices false \
-            --apt-recommends false \
-            --packages "live-task-kde-desktop sddm dolphin konsole firefox-esr network-manager calamares"
+            --packages "live-boot live-config systemd-sysv live-task-kde-desktop sddm dolphin konsole firefox-esr network-manager calamares"
 
           CHROOT_DIR="config/includes.chroot"
 
-          # Create directory paths
+          # Create directory structure
           mkdir -p "$CHROOT_DIR/etc/xdg/plasma-workspace"
           mkdir -p "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images"
           mkdir -p "$CHROOT_DIR/etc/skel/.config/fastfetch"
@@ -86,7 +87,6 @@ jobs:
           # Build ISO
           lb build
 
-          # Output check
           if [ -f live-image-amd64.hybrid.iso ]; then
             mv live-image-amd64.hybrid.iso HimalayanOS-v1.iso
           fi
