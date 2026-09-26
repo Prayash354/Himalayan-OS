@@ -14,17 +14,22 @@ jobs:
       options: --privileged
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Install System Dependencies
         run: |
           apt-get update
-          apt-get install -y live-build debootstrap curl git debian-archive-keyring
+          apt-get install -y live-build debootstrap curl git debian-archive-keyring isolinux syslinux-utils xorriso squashfs-tools
 
       - name: Configure and Build Himalayan OS
         run: |
           mkdir -p himalayan-build
           cd himalayan-build
 
+          # Configure live-build
           lb config \
+            --mode debian \
             --distribution bookworm \
             --binary-images iso-hybrid \
             --architectures amd64 \
@@ -32,11 +37,13 @@ jobs:
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
             --mirror-binary "http://deb.debian.org/debian/" \
+            --apt-indices false \
+            --apt-recommends false \
             --packages "live-task-kde-desktop sddm dolphin konsole firefox-esr network-manager calamares"
 
           CHROOT_DIR="config/includes.chroot"
 
-          # Directory setup
+          # Create directory paths
           mkdir -p "$CHROOT_DIR/etc/xdg/plasma-workspace"
           mkdir -p "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images"
           mkdir -p "$CHROOT_DIR/etc/skel/.config/fastfetch"
@@ -59,7 +66,7 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 2. Mount Everest Wallpaper Config
+          # 2. Wallpaper Config
           cat << 'EOF' > "$CHROOT_DIR/etc/xdg/plasmarc"
           [Wallpaper][org.kde.image][General]
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
@@ -76,10 +83,13 @@ jobs:
           echo -e "\e[1;30m===🏔️ Himalayan OS 🇳🇵===\e[0m"
           EOF
 
-          # Compile ISO
+          # Build ISO
           lb build
 
-          mv live-image-amd64.hybrid.iso HimalayanOS-v1.iso
+          # Output check
+          if [ -f live-image-amd64.hybrid.iso ]; then
+            mv live-image-amd64.hybrid.iso HimalayanOS-v1.iso
+          fi
 
       - name: Upload Completed Himalayan OS ISO File
         uses: actions/upload-artifact@v4
