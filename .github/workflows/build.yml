@@ -33,12 +33,15 @@ jobs:
           sudo mkdir -p himalayan-build
           cd himalayan-build
 
-          # Configure live-build
+          # Configure live-build with explicit Debian mirrors
           sudo lb config \
             --distribution bookworm \
             --binary-images iso-hybrid \
             --architectures amd64 \
-            --archive-areas "main contrib non-free non-free-firmware"
+            --archive-areas "main contrib non-free non-free-firmware" \
+            --mirror-bootstrap "http://deb.debian.org/debian/" \
+            --mirror-chroot "http://deb.debian.org/debian/" \
+            --mirror-binary "http://deb.debian.org/debian/"
 
           # Define directory structure variables
           CHROOT_DIR="config/includes.chroot"
@@ -66,9 +69,7 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 2. Inject Mount Everest Wallpaper
-          sudo curl -L -o "$CHROOT_DIR/usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg" "https://wallpaperflare.com"
-          
+          # 2. Inject Mount Everest Wallpaper Configuration
           cat << 'EOF' | sudo tee "$CHROOT_DIR/etc/xdg/plasmarc" > /dev/null
           [Wallpaper][org.kde.image][General]
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
@@ -94,14 +95,11 @@ jobs:
           cat << 'EOF' | sudo tee -a "$CHROOT_DIR/etc/skel/.bashrc" > /dev/null
 
           # Welcome to Himalayan OS
-          if [ -f /usr/bin/fastfetch ]; then
-              echo -e "\e[1;34m      ◢◣\e[0m"
-              echo -e "\e[1;34m     ◢██◣     \e[1;31m■\e[0m"
-              echo -e "\e[1;34m    ◢████◣    \e[1;31m■■\e[0m"
-              echo -e "\e[1;34m   ◢██████◣   \e[1;31m■■■\e[0m"
-              echo -e "\e[1;30m===🏔️ Himalayan OS 🇳🇵===\e[0m"
-              fastfetch --config ~/.config/fastfetch/config.jsonc
-          fi
+          echo -e "\e[1;34m      ◢◣\e[0m"
+          echo -e "\e[1;34m     ◢██◣     \e[1;31m■\e[0m"
+          echo -e "\e[1;34m    ◢████◣    \e[1;31m■■\e[0m"
+          echo -e "\e[1;34m   ◢██████◣   \e[1;31m■■■\e[0m"
+          echo -e "\e[1;30m===🏔️ Himalayan OS 🇳🇵===\e[0m"
           EOF
 
           # Compile the image
