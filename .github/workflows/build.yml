@@ -29,11 +29,10 @@ jobs:
 
       - name: Configure and Build Himalayan OS
         run: |
-          # Create build directory
           sudo mkdir -p himalayan-build
           cd himalayan-build
 
-          # Configure live-build with explicit Debian mirrors
+          # Configure live-build with official Debian mirrors and valid KDE packages
           sudo lb config \
             --distribution bookworm \
             --binary-images iso-hybrid \
@@ -41,9 +40,9 @@ jobs:
             --archive-areas "main contrib non-free non-free-firmware" \
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
-            --mirror-binary "http://deb.debian.org/debian/"
+            --mirror-binary "http://deb.debian.org/debian/" \
+            --packages "live-task-kde-desktop sddm dolphin konsole firefox-esr network-manager calamares"
 
-          # Define directory structure variables
           CHROOT_DIR="config/includes.chroot"
 
           # Create directory structures
@@ -69,13 +68,13 @@ jobs:
           panel.addWidget("org.kde.plasma.digitalclock");
           EOF
 
-          # 2. Inject Mount Everest Wallpaper Configuration
+          # 2. Mount Everest Wallpaper Config
           cat << 'EOF' | sudo tee "$CHROOT_DIR/etc/xdg/plasmarc" > /dev/null
           [Wallpaper][org.kde.image][General]
           Image=usr/share/wallpapers/HimalayanOS/contents/images/1920x1080.jpg
           EOF
 
-          # 3. Inject Fastfetch Configuration
+          # 3. Fastfetch Configuration
           cat << 'EOF' | sudo tee "$CHROOT_DIR/etc/skel/.config/fastfetch/config.jsonc" > /dev/null
           {
             "$schema": "https://github.com",
@@ -91,7 +90,7 @@ jobs:
           }
           EOF
 
-          # 4. Inject Shell Startup (.bashrc)
+          # 4. Shell Startup (.bashrc)
           cat << 'EOF' | sudo tee -a "$CHROOT_DIR/etc/skel/.bashrc" > /dev/null
 
           # Welcome to Himalayan OS
@@ -100,12 +99,15 @@ jobs:
           echo -e "\e[1;34m    ◢████◣    \e[1;31m■■\e[0m"
           echo -e "\e[1;34m   ◢██████◣   \e[1;31m■■■\e[0m"
           echo -e "\e[1;30m===🏔️ Himalayan OS 🇳🇵===\e[0m"
+          if [ -f /usr/bin/fastfetch ]; then
+              fastfetch --config ~/.config/fastfetch/config.jsonc
+          fi
           EOF
 
-          # Compile the image
+          # Build ISO
           sudo lb build
 
-          # Rename output ISO neatly
+          # Rename ISO file
           sudo mv live-image-amd64.hybrid.iso HimalayanOS-v1.iso
 
       - name: Upload Completed Himalayan OS ISO File
